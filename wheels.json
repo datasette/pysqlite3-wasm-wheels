@@ -1195,6 +1195,19 @@
       "size": 314698,
       "sha256": "3d714f458aaad09a0f8a4a50b8ebf2b7b4eee7e67f63af2aaf24ef4956ca3d27",
       "built": "2026-11-16T07:08:06Z"
+    },
+    {
+      "sqlite_version": "3.19.4",
+      "filename": "pysqlite3-0.6.2-3.19.4-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "path": "wheels/pysqlite3-0.6.2-3.19.4-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "python_tag": "cp314",
+      "abi_tag": "cp314",
+      "platform_tag": "pyemscripten_2026_0_wasm32",
+      "size": 313951,
+      "sha256": "804f2d75712aae2ae27950971697a44754fc074b39df9543f0802c4c29ac86ee",
+      "built": "2026-11-16T07:08:12Z"
     }
   ]
 }
