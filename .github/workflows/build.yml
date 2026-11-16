@@ -1,0 +1,48 @@
+name: Build missing wheels
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      max:
+        description: Maximum number of SQLite versions to build
+        default: "10"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-wheels
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v5
+      - name: Look for SQLite tags without a wheel
+        id: missing
+        run: |
+          python3 scripts/build_missing.py list
+          echo "count=$(python3 scripts/build_missing.py list --count)" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@v7
+        if: steps.missing.outputs.count != '0'
+      - uses: actions/setup-node@v5
+        if: steps.missing.outputs.count != '0'
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        if: steps.missing.outputs.count != '0'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tcl
+          npm ci
+      - name: Build, test and commit wheels
+        if: steps.missing.outputs.count != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 scripts/build_missing.py build --max "${{ inputs.max || '10' }}" --push
