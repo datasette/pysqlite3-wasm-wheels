@@ -204,6 +204,13 @@
       "failed": "2026-11-16T07:27:18Z"
     },
     {
+      "sqlite_version": "3.6.17",
+      "error": "build failed",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "failed": "2026-11-16T07:27:38Z"
+    },
+    {
       "sqlite_version": "3.6.16.1",
       "error": "build failed",
       "pysqlite3_version": "0.6.2",
