@@ -248,6 +248,32 @@
       "built": "2026-11-16T06:59:48Z"
     },
     {
+      "sqlite_version": "3.49.0",
+      "filename": "pysqlite3-0.6.2-3.49.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "path": "wheels/pysqlite3-0.6.2-3.49.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "python_tag": "cp314",
+      "abi_tag": "cp314",
+      "platform_tag": "pyemscripten_2026_0_wasm32",
+      "size": 408569,
+      "sha256": "c07b7b056e72a512a34feccafa184fd86d1a195cd803ece4a332ce871e24bd77",
+      "built": "2026-11-16T06:59:53Z"
+    },
+    {
+      "sqlite_version": "3.48.0",
+      "filename": "pysqlite3-0.6.2-3.48.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "path": "wheels/pysqlite3-0.6.2-3.48.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "python_tag": "cp314",
+      "abi_tag": "cp314",
+      "platform_tag": "pyemscripten_2026_0_wasm32",
+      "size": 408102,
+      "sha256": "10496858b1da20c1aeef9353d47c68b5729512bef8a6f3e68fbfc4075fe5b3c5",
+      "built": "2026-11-16T06:59:53Z"
+    },
+    {
       "sqlite_version": "3.44.0",
       "filename": "pysqlite3-0.6.2-3.44.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
       "path": "wheels/pysqlite3-0.6.2-3.44.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
