@@ -58,7 +58,7 @@ button:disabled { opacity: .5; cursor: default; }
 .verdict.differ { color: var(--diff); font-weight: 600; }
 .groups { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
 .group { min-width: 0; max-width: 100%; }
-.differ + .groups .group { border: 1px solid var(--diff); background: var(--diff-bg); border-radius: 6px; padding: 8px; }
+.differ ~ .groups .group { border: 1px solid var(--diff); background: var(--diff-bg); border-radius: 6px; padding: 8px; }
 .group h3 { margin: 0 0 6px; font-size: .85rem; }
 .scroll { overflow: auto; max-width: 100%; max-height: 420px; margin-bottom: 6px; }
 table { border-collapse: collapse; font-size: .85rem; margin-bottom: 6px; }
@@ -66,6 +66,14 @@ th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vert
 th { background: var(--panel); }
 td.null, td.blob { color: var(--muted); font-style: italic; }
 td.num { text-align: right; }
+th.mark, td.mark { text-align: center; width: 2em; font-weight: 700; }
+td.mark.yes { color: var(--ok); }
+td.mark.no { color: var(--bad); }
+tr.diff td { background: var(--diff-bg); }
+.only-diff tr.same { display: none; }
+.legend { list-style: none; margin: 0 0 8px; padding: 0; font-size: .85rem; }
+.diffview { width: 100%; margin-bottom: 12px; }
+.verdict label { font-weight: 400; color: var(--fg); cursor: pointer; }
 .error { color: var(--bad); white-space: pre-wrap; font-size: .85rem; }
 #input { display: flex; gap: 8px; align-items: flex-start; }
 textarea {
@@ -111,9 +119,10 @@ const EXAMPLES = [
   "select sqlite_version(), sqlite_source_id()",
   "pragma compile_options",
   "select * from pragma_function_list order by name",
-  "create table t (id integer primary key, body text);\ninsert into t (body) values ('hello'), ('world');\nselect * from t",
+  "drop table if exists t;\ncreate table t (id integer primary key, body text);\ninsert into t (body) values ('hello'), ('world');\nselect * from t",
   "select unistr('caf\\u00e9')",
   "select json_pretty('{\"a\": [1, 2]}')",
+  "select json_object('a', (select json_array(1)))",
   "explain query plan select * from sqlite_master where name = 'x'",
 ];
 
@@ -198,13 +207,20 @@ let nextId = 1;
 const pending = new Map();
 const commands = [];
 let historyIndex = 0;
+let lastSql = "";
 
 function selected() {
   return [...document.querySelectorAll("#versions input:checked")].map((i) => i.value);
 }
 
 function renderVersions() {
-  const wanted = new Set(location.hash.slice(1).split(",").filter(Boolean));
+  // ?versions=3.54.1,3.44.0&sql=select+1 - also accepted after a # instead
+  let params = new URLSearchParams(location.search);
+  if (!params.has("versions")) params = new URLSearchParams(location.hash.slice(1));
+  const available = new Set(wheels.map((w) => w.sqlite_version));
+  const wanted = new Set((params.get("versions") || "").split(",").filter((v) => available.has(v)));
+  const fromUrl = wanted.size > 0;
+  lastSql = params.get("sql") || "";
   if (!wanted.size && wheels.length) wanted.add(wheels[0].sqlite_version);
   $("versions").replaceChildren(
     ...wheels.map((w) =>
@@ -214,13 +230,29 @@ function renderVersions() {
   );
   $("count").textContent = `(${wheels.length} available)`;
   onSelectionChange();
+  if (fromUrl) {
+    // A bookmarked URL: load its versions and run its query straight away
+    start();
+    if (lastSql) {
+      $("sql").value = lastSql;
+      run();
+    }
+  }
+}
+
+function updateUrl() {
+  const parts = [];
+  const versions = selected();
+  if (versions.length) parts.push("versions=" + versions.join(","));
+  if (lastSql) parts.push("sql=" + encodeURIComponent(lastSql).replace(/%20/g, "+"));
+  history.replaceState(null, "", location.pathname + (parts.length ? "?" + parts.join("&") : ""));
 }
 
 function onSelectionChange() {
   const versions = selected();
   $("start").disabled = !versions.length;
   $("start").textContent = versions.length > 1 ? `Start REPL with ${versions.length} versions` : "Start REPL";
-  history.replaceState(null, "", "#" + versions.join(","));
+  updateUrl();
 }
 
 function start() {
@@ -295,12 +327,83 @@ function renderResult(result) {
   return parts;
 }
 
+// When versions disagree but share some rows, one merged table shows exactly
+// which rows each group of versions returned. Returns null if that would not
+// help: errors, different columns, or nothing in common.
+function renderDiff(groups) {
+  const first = groups[0].result;
+  if (groups.some((g) => g.result.error || g.result.results.length !== first.results.length)) return null;
+  const letters = groups.map((_, i) => String.fromCharCode(65 + i));
+  const tables = [];
+  let shared = 0;
+  for (let t = 0; t < first.results.length; t++) {
+    const columns = first.results[t].columns;
+    if (groups.some((g) => JSON.stringify(g.result.results[t].columns) !== JSON.stringify(columns))) return null;
+    const merged = []; // {row, groups: Set}, in an order that respects every group's order
+    const byKey = new Map();
+    groups.forEach((g, gi) => {
+      const seen = new Map();
+      let position = -1;
+      for (const row of g.result.results[t].rows) {
+        const json = JSON.stringify(row);
+        seen.set(json, (seen.get(json) || 0) + 1);
+        const key = json + "#" + seen.get(json); // so repeated rows are counted
+        let item = byKey.get(key);
+        if (item) {
+          position = Math.max(position, merged.indexOf(item));
+        } else {
+          item = { row, groups: new Set() };
+          byKey.set(key, item);
+          merged.splice(++position, 0, item);
+        }
+        item.groups.add(gi);
+      }
+    });
+    const differing = merged.filter((item) => item.groups.size < groups.length).length;
+    shared += merged.length - differing;
+    const table = el("table", {},
+      el("thead", {}, el("tr", {},
+        ...letters.map((letter, i) => el("th", { className: "mark", title: "SQLite " + groups[i].versions.join(", ") }, letter)),
+        ...columns.map((c) => el("th", {}, c)))),
+      el("tbody", {}, ...merged.map((item) =>
+        el("tr", { className: item.groups.size < groups.length ? "diff" : "same" },
+          ...groups.map((_, gi) => el("td", { className: "mark " + (item.groups.has(gi) ? "yes" : "no") }, item.groups.has(gi) ? "✓" : "✗")),
+          ...item.row.map(renderCell)))));
+    const wrapper = el("div", { className: "scroll" }, table);
+    const parts = [];
+    if (!differing) {
+      parts.push(el("div", { className: "muted" }, `All ${merged.length} rows are the same in every version`));
+    } else {
+      const only = el("input", { type: "checkbox", checked: merged.length > 12 });
+      const sync = () => wrapper.classList.toggle("only-diff", only.checked);
+      only.addEventListener("change", sync);
+      sync();
+      parts.push(el("div", { className: "verdict" },
+        `${differing} of ${merged.length} rows differ. `,
+        el("label", {}, only, " Only show rows that differ")));
+    }
+    parts.push(wrapper);
+    if (groups.some((g) => g.result.results[t].truncated)) {
+      parts.push(el("div", { className: "muted" }, "Comparing only the first 1,000 rows from each version"));
+    }
+    tables.push(...parts);
+  }
+  if (!shared) return null;
+  return el("div", { className: "group diffview" },
+    el("ul", { className: "legend" }, ...groups.map((g, i) =>
+      el("li", {}, el("b", {}, letters[i]), " = SQLite " + g.versions.join(", ")))),
+    ...tables);
+}
+
 async function run() {
   const sql = $("sql").value.trim();
   if (!sql || !sessions.length) return;
-  commands.push(sql);
+  if (commands.at(-1) !== sql) commands.push(sql);
   historyIndex = commands.length;
-  $("sql").value = "";
+  lastSql = sql;
+  updateUrl();
+  $("sql").value = sql;
+  $("sql").select();
   const body = el("div", { className: "muted" }, "Running…");
   const entry = el("div", { className: "entry" }, el("pre", {}, sql), body);
   $("log").prepend(entry);
@@ -316,8 +419,14 @@ async function run() {
   const differ = groups.size > 1;
   const verdict = current.length === 1 ? "" : el("div", { className: "verdict " + (differ ? "differ" : "muted") },
     differ ? `Versions differ: ${groups.size} different results` : `Same result from all ${current.length} versions`);
-  body.replaceWith(verdict, el("div", { className: "groups" },
-    ...[...groups.values()].map((g) =>
+  // Versions that returned rows are merged into one diff table. Versions that
+  // raised an error (or returned nothing) are shown separately beside it.
+  const all = [...groups.values()];
+  const withRows = all.filter((g) => !g.result.error && g.result.results.length);
+  const diff = differ && withRows.length > 1 ? renderDiff(withRows) : null;
+  const separate = diff ? all.filter((g) => !withRows.includes(g)) : all;
+  body.replaceWith(verdict, diff || "", el("div", { className: "groups" },
+    ...separate.map((g) =>
       el("div", { className: "group" },
         differ || current.length === 1 ? el("h3", {}, "SQLite " + g.versions.join(", ")) : "",
         ...renderResult(g.result)))));
@@ -352,7 +461,11 @@ $("sql").addEventListener("keydown", (event) => {
 });
 $("examples").append("Examples: ", ...EXAMPLES.map((sql) => {
   const button = el("button", { type: "button", title: sql }, sql.split("\n").pop().slice(0, 44));
-  button.addEventListener("click", () => { $("sql").value = sql; $("sql").focus(); });
+  button.addEventListener("click", () => {
+    if (!sessions.length) start();
+    $("sql").value = sql;
+    run();
+  });
   return button;
 }));
 
