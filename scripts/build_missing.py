@@ -11,8 +11,10 @@ Standard library only. Building needs everything scripts/build.sh needs, plus
 Node.js with the "pyodide" npm package installed (npm ci) for the test.
 """
 import argparse
+import concurrent.futures
 import datetime
 import hashlib
+import itertools
 import json
 import os
 import pathlib
@@ -119,12 +121,24 @@ def missing_versions():
 
 
 def run(*args, **kwargs):
-    print("+", " ".join(str(a) for a in args), flush=True)
+    if "stdout" not in kwargs:
+        print("+", " ".join(str(a) for a in args), flush=True)
     return subprocess.run(args, cwd=ROOT, **kwargs)
 
 
-def build_one(version):
-    "Build and test one version. Returns (wheel path or None, error or None)"
+def build_one(version, log=None):
+    """
+    Build and test one version. Returns (wheel path or None, error or None).
+    Output goes to the log file if there is one, which parallel builds need.
+    """
+    if log:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("w") as fp:
+            return _build_one(version, stdout=fp, stderr=subprocess.STDOUT)
+    return _build_one(version)
+
+
+def _build_one(version, **output):
     env = dict(
         os.environ,
         SQLITE_REPO=SQLITE_REPO,
@@ -134,12 +148,12 @@ def build_one(version):
     )
     for stale in WHEELS_DIR.glob(f"pysqlite3-*-{version}-*.whl"):
         stale.unlink()
-    if run("scripts/build.sh", version, env=env).returncode != 0:
+    if run("scripts/build.sh", version, env=env, **output).returncode != 0:
         return None, "build failed"
     built = list(WHEELS_DIR.glob(f"pysqlite3-*-{version}-*.whl"))
     if len(built) != 1:
         return None, f"expected one wheel, found {len(built)}"
-    if run("node", "scripts/test.mjs", built[0], version).returncode != 0:
+    if run("node", "scripts/test.mjs", built[0], version, **output).returncode != 0:
         built[0].unlink()
         return None, "test failed"
     return built[0], None
@@ -177,6 +191,7 @@ def main():
     build_parser = sub.add_parser("build", help="Build missing versions")
     build_parser.add_argument("versions", nargs="*", help="Default: all missing")
     build_parser.add_argument("--max", type=int, default=10)
+    build_parser.add_argument("--jobs", type=int, default=1, help="Parallel builds")
     build_parser.add_argument("--commit", action="store_true", help="Commit each result")
     build_parser.add_argument("--push", action="store_true", help="Push each commit")
     sub.add_parser("index", help="Rebuild wheels.json")
@@ -190,9 +205,22 @@ def main():
     elif args.command == "build":
         versions = (args.versions or missing_versions())[: args.max]
         failed = []
-        for version in versions:
-            print(f"\n=== SQLite {version} ===", flush=True)
-            wheel, error = build_one(version)
+        if args.jobs > 1:
+            # The first build runs alone, since it may have to install the tools
+            logs = ROOT / "build" / "logs"
+            first = [(versions[0], build_one(versions[0], logs / f"{versions[0]}.log"))]
+            pool = concurrent.futures.ThreadPoolExecutor(args.jobs)
+            futures = {
+                pool.submit(build_one, v, logs / f"{v}.log"): v for v in versions[1:]
+            }
+            results = itertools.chain(
+                first,
+                ((futures[f], f.result()) for f in concurrent.futures.as_completed(futures)),
+            )
+        else:
+            results = ((v, build_one(v)) for v in versions)
+        for done, (version, (wheel, error)) in enumerate(results, 1):
+            print(f"\n=== SQLite {version}: {error or 'ok'} ({done}/{len(versions)}) ===", flush=True)
             if wheel:
                 update_index()
                 message, paths = f"Wheel for SQLite {version}", [wheel, INDEX]

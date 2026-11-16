@@ -28,8 +28,11 @@ if [ ! -x venv/bin/pyodide ]; then
 fi
 # shellcheck disable=SC1091
 source venv/bin/activate
-pyodide xbuildenv install "$PYODIDE_VERSION"
-pyodide xbuildenv install-emscripten
+if [ ! -f ".xbuildenv-$PYODIDE_VERSION" ]; then
+  pyodide xbuildenv install "$PYODIDE_VERSION"
+  pyodide xbuildenv install-emscripten
+  touch ".xbuildenv-$PYODIDE_VERSION"
+fi
 
 # 2. SQLite amalgamation, generated from the tagged source with the native
 #    compiler (so this has to happen before the Emscripten environment is loaded)
