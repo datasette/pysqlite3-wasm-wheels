@@ -37,9 +37,14 @@ fi
 # 2. SQLite amalgamation, generated from the tagged source with the native
 #    compiler (so this has to happen before the Emscripten environment is loaded)
 SRC="$BUILD/sqlite-$SQLITE_VERSION"
-rm -rf "$SRC"
-git -c advice.detachedHead=false clone --quiet --depth 1 \
-  --branch "version-$SQLITE_VERSION" "$SQLITE_REPO" "$SRC"
+for attempt in 1 2 3 4 5; do
+  rm -rf "$SRC"
+  git -c advice.detachedHead=false clone --quiet --depth 1 \
+    --branch "version-$SQLITE_VERSION" "$SQLITE_REPO" "$SRC" && break
+  # Exit code 3 tells build_missing.py this was the network, not the build
+  [ "$attempt" = 5 ] && exit 3
+  sleep $((attempt * 5))
+done
 mkdir "$SRC/bld"
 (
   cd "$SRC/bld"

@@ -31,6 +31,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 WHEELS_DIR = ROOT / "wheels"
 INDEX = ROOT / "wheels.json"
 FAILURES = ROOT / "failures.json"
+CLONE_FAILED = "could not clone SQLite"
 
 # Only SQLite 3 tags: "version-3.54.1", "version-3.7.16.2"
 TAG_RE = re.compile(r"^refs/tags/version-(3(?:\.\d+){1,3})$")
@@ -148,7 +149,10 @@ def _build_one(version, **output):
     )
     for stale in WHEELS_DIR.glob(f"pysqlite3-*-{version}-*.whl"):
         stale.unlink()
-    if run("scripts/build.sh", version, env=env, **output).returncode != 0:
+    code = run("scripts/build.sh", version, env=env, **output).returncode
+    if code == 3:
+        return None, CLONE_FAILED
+    if code != 0:
         return None, "build failed"
     built = list(WHEELS_DIR.glob(f"pysqlite3-*-{version}-*.whl"))
     if len(built) != 1:
@@ -224,6 +228,10 @@ def main():
             if wheel:
                 update_index()
                 message, paths = f"Wheel for SQLite {version}", [wheel, INDEX]
+            elif error == CLONE_FAILED:
+                # Not the version's fault, so leave it to be tried again next time
+                failed.append(version)
+                continue
             else:
                 failed.append(version)
                 record_failure(version, error)
