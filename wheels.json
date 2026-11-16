@@ -1483,6 +1483,32 @@
       "built": "2026-11-16T07:22:39Z"
     },
     {
+      "sqlite_version": "3.13.0",
+      "filename": "pysqlite3-0.6.2-3.13.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "path": "wheels/pysqlite3-0.6.2-3.13.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "python_tag": "cp314",
+      "abi_tag": "cp314",
+      "platform_tag": "pyemscripten_2026_0_wasm32",
+      "size": 304264,
+      "sha256": "7b7a868d3521074f549831c33bf9a9b5cb4b423b864d457e27bd6bdf315a8a5e",
+      "built": "2026-11-16T07:22:47Z"
+    },
+    {
+      "sqlite_version": "3.12.2",
+      "filename": "pysqlite3-0.6.2-3.12.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "path": "wheels/pysqlite3-0.6.2-3.12.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "python_tag": "cp314",
+      "abi_tag": "cp314",
+      "platform_tag": "pyemscripten_2026_0_wasm32",
+      "size": 303984,
+      "sha256": "27b51951fd282a6fde82b2a5070a1ac7f349c91e3f8e9db8687ff3fde60dc44a",
+      "built": "2026-11-16T07:22:47Z"
+    },
+    {
       "sqlite_version": "3.12.1",
       "filename": "pysqlite3-0.6.2-3.12.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
       "path": "wheels/pysqlite3-0.6.2-3.12.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
@@ -1494,6 +1520,19 @@
       "size": 304006,
       "sha256": "0fc6ccec0cf0c965f1838bc48cdcfc8ef0bdb37aafeee9aaf46194fea5c295d6",
       "built": "2026-11-16T07:22:45Z"
+    },
+    {
+      "sqlite_version": "3.12.0",
+      "filename": "pysqlite3-0.6.2-3.12.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "path": "wheels/pysqlite3-0.6.2-3.12.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "pysqlite3_version": "0.6.2",
+      "pyodide_version": "314.0.8",
+      "python_tag": "cp314",
+      "abi_tag": "cp314",
+      "platform_tag": "pyemscripten_2026_0_wasm32",
+      "size": 303958,
+      "sha256": "f0aec7ec667661b1e8a5cb3722205cdd9caab3391b13758696da8f001fb9e0ad",
+      "built": "2026-11-16T07:22:47Z"
     },
     {
       "sqlite_version": "3.11.1",
