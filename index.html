@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pysqlite3 WASM wheels: compare SQLite versions</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #d5d5d5; --panel: #f5f5f3;
+  --accent: #0b5cad; --ok: #1a7f37; --bad: #b3261e; --diff: #9a5b00; --diff-bg: #fff6e0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181b; --fg: #e6e6e6; --muted: #9aa0a6; --line: #3a3d42; --panel: #1f2226;
+    --accent: #7ab7ff; --ok: #5fd07a; --bad: #ff8a80; --diff: #ffc66d; --diff-bg: #33290f;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 16px; max-width: 1100px;
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--fg);
+}
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+h2 { font-size: 1rem; margin: 24px 0 8px; }
+p { margin: 0 0 12px; }
+a { color: var(--accent); }
+code, pre, textarea, table, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.muted { color: var(--muted); }
+button, input[type=search] {
+  font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--fg);
+}
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+#versions {
+  display: flex; flex-wrap: wrap; gap: 6px; max-height: 190px; overflow-y: auto;
+  padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+}
+#versions label {
+  padding: 2px 8px 2px 6px; border: 1px solid var(--line); border-radius: 999px;
+  font-size: .85rem; cursor: pointer; white-space: nowrap; user-select: none;
+}
+#versions label:has(input:checked) { border-color: var(--accent); background: var(--panel); font-weight: 600; }
+#versions input { margin: 0 4px 0 0; vertical-align: -1px; }
+#sessions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; font-size: .85rem; }
+#sessions span { padding: 2px 8px; border-radius: 4px; background: var(--panel); }
+#sessions .ready { color: var(--ok); }
+#sessions .failed { color: var(--bad); }
+#log { margin-top: 12px; }
+.entry { border-top: 1px solid var(--line); padding: 12px 0; }
+.entry > pre { margin: 0 0 8px; white-space: pre-wrap; font-weight: 600; }
+.entry > pre::before { content: "sqlite> "; color: var(--muted); font-weight: 400; }
+.verdict { font-size: .85rem; margin-bottom: 6px; }
+.verdict.differ { color: var(--diff); font-weight: 600; }
+.groups { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.group { min-width: 0; max-width: 100%; }
+.differ + .groups .group { border: 1px solid var(--diff); background: var(--diff-bg); border-radius: 6px; padding: 8px; }
+.group h3 { margin: 0 0 6px; font-size: .85rem; }
+.scroll { overflow: auto; max-width: 100%; max-height: 420px; margin-bottom: 6px; }
+table { border-collapse: collapse; font-size: .85rem; margin-bottom: 6px; }
+th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+th { background: var(--panel); }
+td.null, td.blob { color: var(--muted); font-style: italic; }
+td.num { text-align: right; }
+.error { color: var(--bad); white-space: pre-wrap; font-size: .85rem; }
+#input { display: flex; gap: 8px; align-items: flex-start; }
+textarea {
+  flex: 1; min-height: 4.2em; padding: 8px; font-size: .9rem; resize: vertical;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg);
+}
+#examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: .85rem; }
+#examples button { padding: 2px 8px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>pysqlite3 WASM wheels</h1>
+<p class="muted">
+  <a href="https://github.com/coleifer/pysqlite3">pysqlite3</a> wheels for
+  <a href="https://pyodide.org/">Pyodide</a>, one for every tagged version of SQLite.
+  Pick one or more versions to run SQL against in-memory databases in your browser.
+  The full list is in <a href="wheels.json">wheels.json</a>.
+</p>
+
+<h2>SQLite versions <span id="count" class="muted"></span></h2>
+<div class="toolbar">
+  <input type="search" id="filter" placeholder="Filter, e.g. 3.4" aria-label="Filter versions">
+  <button id="clear" type="button">Clear selection</button>
+  <button id="start" type="button" class="primary" disabled>Start REPL</button>
+</div>
+<div id="versions">Loading wheels.json…</div>
+
+<section id="repl" hidden>
+  <h2>REPL</h2>
+  <div id="sessions"></div>
+  <div id="input">
+    <textarea id="sql" spellcheck="false" autocapitalize="off" aria-label="SQL"
+      placeholder="SQL to run against every selected version. Enter to run, Shift+Enter for a new line, ↑/↓ for history."></textarea>
+    <button id="run" type="button" class="primary">Run</button>
+  </div>
+  <div id="examples"></div>
+  <div id="log"></div>
+</section>
+
+<script>
+const EXAMPLES = [
+  "select sqlite_version(), sqlite_source_id()",
+  "pragma compile_options",
+  "select * from pragma_function_list order by name",
+  "create table t (id integer primary key, body text);\ninsert into t (body) values ('hello'), ('world');\nselect * from t",
+  "select unistr('caf\\u00e9')",
+  "select json_pretty('{\"a\": [1, 2]}')",
+  "explain query plan select * from sqlite_master where name = 'x'",
+];
+
+// Runs inside each Web Worker: one Pyodide, one wheel, one in-memory database
+const WORKER_SOURCE = `
+const PYTHON = \`
+import json, math, pysqlite3
+
+db = pysqlite3.connect(":memory:")
+db.isolation_level = None  # autocommit, so BEGIN / COMMIT behave as typed
+MAX_ROWS = 1000
+
+def statements(sql):
+    found, current = [], ""
+    for ch in sql:
+        current += ch
+        if ch == ";" and pysqlite3.complete_statement(current):
+            found.append(current)
+            current = ""
+    if current.strip():
+        found.append(current)
+    return found
+
+def clean(value):
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {"blob": bytes(value).hex()}
+    if isinstance(value, float) and not math.isfinite(value):
+        return {"float": str(value)}
+    if isinstance(value, int) and abs(value) > 2**53:
+        return {"int": str(value)}
+    return value
+
+def run_sql(sql):
+    results = []
+    try:
+        for statement in statements(sql):
+            cursor = db.execute(statement)
+            if cursor.description is None:
+                continue
+            rows = cursor.fetchmany(MAX_ROWS + 1)
+            results.append({
+                "columns": [d[0] for d in cursor.description],
+                "rows": [[clean(v) for v in row] for row in rows[:MAX_ROWS]],
+                "truncated": len(rows) > MAX_ROWS,
+            })
+    except Exception as e:
+        return json.dumps({"results": results, "error": f"{type(e).__name__}: {e}"})
+    return json.dumps({"results": results})
+\`;
+let runSql;
+onmessage = async (event) => {
+  const msg = event.data;
+  try {
+    if (msg.type === "init") {
+      const { loadPyodide } = await import(msg.pyodideUrl + "pyodide.mjs");
+      const pyodide = await loadPyodide({ indexURL: msg.pyodideUrl });
+      await pyodide.loadPackage(msg.wheelUrl, { messageCallback() {} });
+      pyodide.runPython(PYTHON);
+      runSql = pyodide.globals.get("run_sql");
+      postMessage({ type: "ready", version: pyodide.runPython("pysqlite3.sqlite_version") });
+    } else {
+      postMessage({ type: "result", id: msg.id, result: JSON.parse(runSql(msg.sql)) });
+    }
+  } catch (error) {
+    postMessage({ type: msg.type === "init" ? "failed" : "result", id: msg.id,
+                  error: String(error), result: { results: [], error: String(error) } });
+  }
+};
+`;
+const workerUrl = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: "text/javascript" }));
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...children) => {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+};
+
+let wheels = [];
+let sessions = []; // {wheel, worker, ready: Promise, status: element}
+let nextId = 1;
+const pending = new Map();
+const commands = [];
+let historyIndex = 0;
+
+function selected() {
+  return [...document.querySelectorAll("#versions input:checked")].map((i) => i.value);
+}
+
+function renderVersions() {
+  const wanted = new Set(location.hash.slice(1).split(",").filter(Boolean));
+  if (!wanted.size && wheels.length) wanted.add(wheels[0].sqlite_version);
+  $("versions").replaceChildren(
+    ...wheels.map((w) =>
+      el("label", { title: `${w.filename} (${Math.round(w.size / 1024)} KB)` },
+        el("input", { type: "checkbox", value: w.sqlite_version, checked: wanted.has(w.sqlite_version) }),
+        w.sqlite_version))
+  );
+  $("count").textContent = `(${wheels.length} available)`;
+  onSelectionChange();
+}
+
+function onSelectionChange() {
+  const versions = selected();
+  $("start").disabled = !versions.length;
+  $("start").textContent = versions.length > 1 ? `Start REPL with ${versions.length} versions` : "Start REPL";
+  history.replaceState(null, "", "#" + versions.join(","));
+}
+
+function start() {
+  for (const s of sessions) s.worker.terminate();
+  pending.clear();
+  $("log").replaceChildren();
+  const chosen = new Set(selected());
+  sessions = wheels.filter((w) => chosen.has(w.sqlite_version)).map((wheel) => {
+    const status = el("span", {}, `${wheel.sqlite_version}: loading…`);
+    const worker = new Worker(workerUrl, { type: "module" });
+    const session = { wheel, worker, status };
+    session.ready = new Promise((resolve) => {
+      worker.onmessage = ({ data }) => {
+        if (data.type === "ready") {
+          status.textContent = `${data.version} ready`;
+          status.className = "ready";
+          resolve(true);
+        } else if (data.type === "failed") {
+          status.textContent = `${wheel.sqlite_version} failed: ${data.error}`;
+          status.className = "failed";
+          resolve(false);
+        } else if (pending.has(data.id)) {
+          pending.get(data.id)(data.result);
+          pending.delete(data.id);
+        }
+      };
+      worker.onerror = (event) => {
+        status.textContent = `${wheel.sqlite_version} failed: ${event.message}`;
+        status.className = "failed";
+        resolve(false);
+      };
+    });
+    worker.postMessage({
+      type: "init",
+      pyodideUrl: `https://cdn.jsdelivr.net/pyodide/v${wheel.pyodide_version}/full/`,
+      wheelUrl: new URL(wheel.path, location.href).href,
+    });
+    return session;
+  });
+  $("sessions").replaceChildren(...sessions.map((s) => s.status));
+  $("repl").hidden = false;
+  $("sql").focus();
+}
+
+async function execute(session, sql) {
+  if (!(await session.ready)) return { results: [], error: "This version failed to load" };
+  return new Promise((resolve) => {
+    const id = nextId++;
+    pending.set(id, resolve);
+    session.worker.postMessage({ type: "sql", id, sql });
+  });
+}
+
+function renderCell(value) {
+  if (value === null) return el("td", { className: "null" }, "NULL");
+  if (typeof value === "object") {
+    if ("blob" in value) return el("td", { className: "blob" }, `X'${value.blob}'`);
+    return el("td", { className: "num" }, value.float ?? value.int);
+  }
+  return el("td", { className: typeof value === "number" ? "num" : "" }, String(value));
+}
+
+function renderResult(result) {
+  const parts = result.results.map((r) =>
+    el("div", { className: "scroll" },
+      el("table", {},
+        el("thead", {}, el("tr", {}, ...r.columns.map((c) => el("th", {}, c)))),
+        el("tbody", {}, ...r.rows.map((row) => el("tr", {}, ...row.map(renderCell))))),
+      r.truncated ? el("div", { className: "muted" }, `Showing the first ${r.rows.length} rows`) : ""));
+  if (result.error) parts.push(el("div", { className: "error" }, result.error));
+  if (!parts.length) parts.push(el("div", { className: "muted" }, "OK, no rows returned"));
+  return parts;
+}
+
+async function run() {
+  const sql = $("sql").value.trim();
+  if (!sql || !sessions.length) return;
+  commands.push(sql);
+  historyIndex = commands.length;
+  $("sql").value = "";
+  const body = el("div", { className: "muted" }, "Running…");
+  const entry = el("div", { className: "entry" }, el("pre", {}, sql), body);
+  $("log").prepend(entry);
+  const current = sessions;
+  const results = await Promise.all(current.map((s) => execute(s, sql)));
+  // Group versions that produced exactly the same output
+  const groups = new Map();
+  results.forEach((result, i) => {
+    const key = JSON.stringify(result);
+    if (!groups.has(key)) groups.set(key, { result, versions: [] });
+    groups.get(key).versions.push(current[i].wheel.sqlite_version);
+  });
+  const differ = groups.size > 1;
+  const verdict = current.length === 1 ? "" : el("div", { className: "verdict " + (differ ? "differ" : "muted") },
+    differ ? `Versions differ: ${groups.size} different results` : `Same result from all ${current.length} versions`);
+  body.replaceWith(verdict, el("div", { className: "groups" },
+    ...[...groups.values()].map((g) =>
+      el("div", { className: "group" },
+        differ || current.length === 1 ? el("h3", {}, "SQLite " + g.versions.join(", ")) : "",
+        ...renderResult(g.result)))));
+}
+
+$("versions").addEventListener("change", onSelectionChange);
+$("filter").addEventListener("input", () => {
+  const q = $("filter").value.trim();
+  for (const label of $("versions").children) {
+    const input = label.firstChild;
+    label.hidden = !!q && !input.value.startsWith(q) && !input.checked;
+  }
+});
+$("clear").addEventListener("click", () => {
+  for (const input of document.querySelectorAll("#versions input")) input.checked = false;
+  onSelectionChange();
+});
+$("start").addEventListener("click", start);
+$("run").addEventListener("click", run);
+$("sql").addEventListener("keydown", (event) => {
+  const box = event.target;
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    run();
+  } else if (event.key === "ArrowUp" && !box.value.slice(0, box.selectionStart).includes("\n") && historyIndex > 0) {
+    event.preventDefault();
+    box.value = commands[--historyIndex];
+  } else if (event.key === "ArrowDown" && !box.value.slice(box.selectionEnd).includes("\n") && historyIndex < commands.length) {
+    event.preventDefault();
+    box.value = commands[++historyIndex] ?? "";
+  }
+});
+$("examples").append("Examples: ", ...EXAMPLES.map((sql) => {
+  const button = el("button", { type: "button", title: sql }, sql.split("\n").pop().slice(0, 44));
+  button.addEventListener("click", () => { $("sql").value = sql; $("sql").focus(); });
+  return button;
+}));
+
+fetch("wheels.json")
+  .then((response) => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  })
+  .then((data) => { wheels = data.wheels; renderVersions(); })
+  .catch((error) => { $("versions").textContent = `Could not load wheels.json: ${error.message}`; });
+</script>
+</body>
+</html>
